@@ -4,7 +4,7 @@ import (
 	"context"
 )
 
-func (conn *Connection) doExecute(ctx context.Context, r *request) *Result {
+func (conn *Connection) doExecute(ctx context.Context, r *request) ([][]interface{}, error) {
 	var err error
 
 	requestID := conn.nextID()
@@ -13,13 +13,7 @@ func (conn *Connection) doExecute(ctx context.Context, r *request) *Result {
 	defer pp.Release()
 
 	if pp.code, err = r.query.Pack(conn.packData, &pp.buffer); err != nil {
-		return &Result{
-			Error: &QueryError{
-				Code:  ErrInvalidMsgpack,
-				error: err,
-			},
-			ErrorCode: ErrInvalidMsgpack,
-		}
+		return nil, &QueryError{Code: ErrInvalidMsgpack, error: err}
 	}
 
 	if oldRequest := conn.requests.Put(requestID, r); oldRequest != nil {
@@ -33,37 +27,26 @@ func (conn *Connection) doExecute(ctx context.Context, r *request) *Result {
 	case conn.writeChan <- pp:
 	case <-ctx.Done():
 		conn.requests.Pop(requestID)
-		return &Result{
-			Error:     NewContextError(ctx, conn, "Send error"),
-			ErrorCode: ErrTimeout,
-		}
+		return nil, NewContextError(ctx, conn, "send error")
 	case <-conn.exit:
-		return &Result{
-			Error:     ConnectionClosedError(conn),
-			ErrorCode: ErrNoConnection,
-		}
+		return nil, ConnectionClosedError(conn)
 	}
 
 	var res *Result
 	select {
 	case res = <-r.replyChan:
 	case <-ctx.Done():
-		return &Result{
-			Error:     NewContextError(ctx, conn, "Recv error"),
-			ErrorCode: ErrTimeout,
-		}
+		return nil, NewContextError(ctx, conn, "recv error")
 	case <-conn.exit:
-		return &Result{
-			Error:     ConnectionClosedError(conn),
-			ErrorCode: ErrNoConnection,
-		}
+		return nil, ConnectionClosedError(conn)
 	}
 
-	return res
+	return res.Data, res.Error
 }
 
-func (conn *Connection) Exec(ctx context.Context, q Query) *Result {
+func (conn *Connection) Exec(ctx context.Context, q Query) ([][]interface{}, error) {
 	var cancel context.CancelFunc = func() {}
+	defer cancel()
 
 	request := &request{
 		query:     q,
@@ -73,12 +56,9 @@ func (conn *Connection) Exec(ctx context.Context, q Query) *Result {
 	if _, ok := ctx.Deadline(); !ok && conn.queryTimeout != 0 {
 		ctx, cancel = context.WithTimeout(ctx, conn.queryTimeout)
 	}
-	result := conn.doExecute(ctx, request)
-	cancel()
-	return result
+	return conn.doExecute(ctx, request)
 }
 
 func (conn *Connection) Execute(q Query) ([][]interface{}, error) {
-	res := conn.Exec(context.Background(), q)
-	return res.Data, res.Error
+	return conn.Exec(context.Background(), q)
 }

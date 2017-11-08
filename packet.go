@@ -19,23 +19,20 @@ type Packet struct {
 	Result     *Result
 }
 
-func (pack *Packet) String() string {
-	switch {
-	// response to client
-	case pack.Result != nil:
-		return fmt.Sprintf("Packet Type:%v, ReqID:%v\n%v",
-			pack.code, pack.requestID, pack.Result)
-	// request to server
-	case pack.requestID != 0:
-		return fmt.Sprintf("Packet Type:%v, ReqID:%v\nRequest:%#v",
-			pack.code, pack.requestID, pack.Request)
-	// response from master
-	case pack.LSN != 0:
-		return fmt.Sprintf("Packet LSN:%v, InstanceID:%v, Timestamp:%v\nRequest:%#v",
-			pack.LSN, pack.InstanceID, pack.Timestamp.Format(time.RFC3339), pack.Request)
-	default:
-		return fmt.Sprintf("Packet %#v", pack)
+func decodePacket(pp *packedPacket) (*Packet, error) {
+	r := bytes.NewReader(pp.body)
+
+	p := new(Packet)
+	err := p.decodeHeader(r)
+	if err != nil {
+		return nil, err
 	}
+
+	err = p.decodeBody(r)
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 func (pack *Packet) decodeHeader(r io.Reader) (err error) {
@@ -135,18 +132,21 @@ func (pack *Packet) decodeBody(r io.Reader) (err error) {
 	}
 }
 
-func decodePacket(pp *packedPacket) (*Packet, error) {
-	r := bytes.NewReader(pp.body)
-
-	pack := new(Packet)
-	err := pack.decodeHeader(r)
-	if err != nil {
-		return nil, err
+func (pack *Packet) String() string {
+	switch {
+	// response to client
+	case pack.Result != nil:
+		return fmt.Sprintf("Packet Type:%v, ReqID:%v\n%v",
+			pack.code, pack.requestID, pack.Result)
+		// request to server
+	case pack.requestID != 0:
+		return fmt.Sprintf("Packet Type:%v, ReqID:%v\nRequest:%#v",
+			pack.code, pack.requestID, pack.Request)
+		// response from master
+	case pack.LSN != 0:
+		return fmt.Sprintf("Packet LSN:%v, InstanceID:%v, Timestamp:%v\nRequest:%#v",
+			pack.LSN, pack.InstanceID, pack.Timestamp.Format(time.RFC3339), pack.Request)
+	default:
+		return fmt.Sprintf("Packet %#v", pack)
 	}
-
-	err = pack.decodeBody(r)
-	if err != nil {
-		return nil, err
-	}
-	return pack, nil
 }

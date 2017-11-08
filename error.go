@@ -19,9 +19,9 @@ var (
 	ErrUnknownError = NewQueryError(ErrUnknown, "unknown error")
 )
 
-// Error has Temporary method which returns true if error is temporary.
+// TemporaryError has Temporary method which returns true if error is temporary.
 // It is useful to quickly decide retry or not retry.
-type Error interface {
+type TemporaryError interface {
 	error
 	Temporary() bool // Temporary true if the error is temporary
 }
@@ -48,7 +48,7 @@ func ConnectionClosedError(con *Connection) *ConnectionError {
 	return NewConnectionError(con, message)
 }
 
-// Temporary implements Error interface.
+// Temporary implements TemporaryError interface.
 func (e *ConnectionError) Temporary() bool {
 	return true
 }
@@ -68,7 +68,7 @@ func NewContextError(ctx context.Context, con *Connection, message string) *Cont
 	}
 }
 
-// Temporary implements Error interface.
+// Temporary implements TemporaryError interface.
 func (e *ContextError) Temporary() bool {
 	return true
 }
@@ -88,11 +88,11 @@ func NewQueryError(code int, message string) *QueryError {
 	}
 }
 
-// Temporary implements Error interface.
+// Temporary implements TemporaryError interface.
 func (e *QueryError) Temporary() bool {
 	return false
 }
 
-var _ Error = (*ConnectionError)(nil)
-var _ Error = (*QueryError)(nil)
-var _ Error = (*ContextError)(nil)
+var _ TemporaryError = (*ConnectionError)(nil)
+var _ TemporaryError = (*QueryError)(nil)
+var _ TemporaryError = (*ContextError)(nil)
