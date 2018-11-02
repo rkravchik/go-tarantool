@@ -70,16 +70,15 @@ func (conn *Connection) doExecute(ctx context.Context, r *request) *Result {
 }
 
 func (conn *Connection) Exec(ctx context.Context, q Query) *Result {
-	var cancel context.CancelFunc = func() {}
-
 	request := &request{
 		query:     q,
 		replyChan: make(chan *Result, 1),
 	}
-
-	if _, ok := ctx.Deadline(); !ok && conn.queryTimeout != 0 {
-		ctx, cancel = context.WithTimeout(ctx, conn.queryTimeout)
+	if _, ok := ctx.Deadline(); ok {
+		return conn.doExecute(ctx, request)
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, conn.queryTimeout)
 	result := conn.doExecute(ctx, request)
 	cancel()
 	return result
